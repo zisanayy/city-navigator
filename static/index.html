@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>City Navigator – Events</title>
+<style>
+  :root{
+    --blue:#2563eb; --blue-d:#1d4ed8;
+    --bg:#fafafa; --card:#fff; --muted:#666; --line:#e5e7eb;
+    /* kategori renkleri */
+    --workshop-bg:#eef2ff; --workshop-border:#c7d2fe; --workshop-text:#3730a3;
+    --tour-bg:#e6fffb;     --tour-border:#99f6e4;     --tour-text:#065f46;
+    --welcome-bg:#fff7ed;  --welcome-border:#fed7aa;  --welcome-text:#9a3412;
+    --festival-bg:#fff0f6; --festival-border:#fbcfe8; --festival-text:#9d174d;
+    --meeting-bg:#eff6ff;  --meeting-border:#bfdbfe;  --meeting-text:#1e3a8a;
+  }
+  body{font-family:system-ui,Arial,sans-serif;margin:0;background:var(--bg);}
+  .brand{
+    display:flex;align-items:center;gap:10px;padding:14px 18px;
+    background:linear-gradient(90deg,#111827,#1f2937);
+    color:#fff; position:sticky; top:0; z-index:10;
+  }
+  .brand .logo{font-size:22px}
+  .brand h1{font-size:20px;margin:0}
+  .container{max-width:960px;margin:18px auto;padding:0 16px}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 16px}
+  input,button,select{
+    padding:8px;border:1px solid #ccc;border-radius:10px;background:#fff;
+  }
+  button{background:var(--blue);color:#fff;cursor:pointer;border:none}
+  button:hover{background:var(--blue-d)}
+  .sections{display:grid;gap:16px}
+  .section{background:#fff;border:1px dashed var(--line);border-radius:14px;padding:12px}
+  h2{margin:6px 4px 12px;font-size:18px}
+  .wrap{display:grid;gap:10px}
+  .card{
+    border:1px solid #e5e7eb;border-radius:14px;padding:14px;background:var(--card);
+    transition:box-shadow .2s, transform .05s;
+  }
+  .card:hover{box-shadow:0 3px 14px rgba(0,0,0,.08); transform:translateY(-1px)}
+  .head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .title{font-weight:700;font-size:16px;display:flex;align-items:center;gap:8px}
+  .source-badge{font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid #ddd;background:#f9f9f9}
+  .uw{background:#e6f0ff;border-color:#99c2ff;color:#004080}
+  .vistula{background:#fff0e6;border-color:#ffb366;color:#663300}
+  .date-badge{display:inline-block;font-size:12px;padding:2px 8px;border-radius:8px;margin-top:6px}
+  .today{background:#e6ffed;color:#065f46}
+  .tomorrow{background:#fff4e6;color:#92400e}
+  .past{background:#f3f4f6;color:#4b5563}
+  .muted{color:var(--muted);font-size:14px}
+  .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .tag{font-size:12px;padding:2px 8px;border-radius:999px;background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe}
+  .actions{display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;align-items:center}
+  .link{color:var(--blue);text-decoration:none}
+  .empty{color:#888;font-style:italic;padding:6px 2px}
+  /* kategoriye göre kart teması (sol şerit + arkaplan) */
+  .cat-workshop{border-left:6px solid var(--workshop-border); background:linear-gradient(0deg,var(--workshop-bg),#fff)}
+  .cat-tour    {border-left:6px solid var(--tour-border);     background:linear-gradient(0deg,var(--tour-bg),#fff)}
+  .cat-welcome {border-left:6px solid var(--welcome-border);  background:linear-gradient(0deg,var(--welcome-bg),#fff)}
+  .cat-festival{border-left:6px solid var(--festival-border); background:linear-gradient(0deg,var(--festival-bg),#fff)}
+  .cat-meeting {border-left:6px solid var(--meeting-border);  background:linear-gradient(0deg,var(--meeting-bg),#fff)}
+  /* mobil */
+  @media (max-width:640px){
+    .controls{gap:6px}
+    .card{padding:12px}
+  }
+</style>
+<body>
+  <header class="brand">
+    <div class="logo">🧭</div>
+    <h1>City Navigator</h1>
+  </header>
+
+  <div class="container">
+     <div class="controls">
+       <input id="search" placeholder="Search (e.g., welcome, tour)" />
+       <label style="display:flex;align-items:center;gap:6px">
+         <input type="checkbox" id="futureOnly" checked /> Future only
+       </label>
+       <select id="src">
+         <option value="">All sources</option>
+         <option value="uw_welcome_point">University of Warsaw – Welcome Point</option>
+         <option value="vistula_news">Vistula University</option>
+       </select>
+       <button id="btnSearch">Search</button>
+       <button id="btnRefresh" title="Fetch latest">↻ Refresh</button>
+       <button id="btnToday">Today</button>
+       <button id="btnWeek">This Week</button>
+     </div>
+
+    <div class="sections">
+      <section class="section">
+        <h2>Upcoming Events</h2>
+        <div id="upcoming" class="wrap">Loading…</div>
+      </section>
+      <section class="section">
+        <h2>Past Events</h2>
+        <div id="past" class="wrap"></div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    /* ---------- tarih formatı (Today/Tomorrow/weekday/short) ---------- */
+    function formatDate(isoString){
+      if (!isoString) return {text:"No date", cls:""};
+      const d = new Date(isoString);
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const diffDays = Math.floor((d - startOfToday) / (1000*60*60*24));
+      const timePart = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+      let text="", cls="";
+      if (diffDays === 0){ text = `Today, ${timePart}`; cls="today"; }
+      else if (diffDays === 1){ text = `Tomorrow, ${timePart}`; cls="tomorrow"; }
+      else if (diffDays < 0){ text = d.toLocaleDateString([], {day:'numeric', month:'short', year:'numeric'}) + `, ${timePart}`; cls="past"; }
+      else if (diffDays > 1 && diffDays < 7){ text = d.toLocaleDateString([], {weekday:'long'}) + `, ${timePart}`; }
+      else { text = d.toLocaleDateString([], {day:'numeric', month:'short', year:'numeric'}) + `, ${timePart}`; }
+      return {text, cls};
+    }
+
+    /* ---------- etiket çıkarımı + ikon + kategori sınıfı ---------- */
+    const KEYWORDS = [
+      { k:/workshop|training|seminar/i, tag:"Workshop", icon:"🛠️", cls:"cat-workshop" },
+      { k:/welcome|orientation|intro/i, tag:"Welcome",  icon:"👋", cls:"cat-welcome" },
+      { k:/tour|campus tour|walk/i,     tag:"Tour",     icon:"🧭", cls:"cat-tour" },
+      { k:/festival|fest|party|gala/i,  tag:"Festival", icon:"🎉", cls:"cat-festival" },
+      { k:/meeting|info session|webinar/i, tag:"Meeting", icon:"🗣️", cls:"cat-meeting" },
+    ];
+    function tagsFromTitle(title=""){
+      const found=[]; for(const m of KEYWORDS){ if(m.k.test(title)) found.push(m.tag); }
+      return [...new Set(found)].slice(0,4);
+    }
+    function categoryFromTitle(title=""){
+      for(const m of KEYWORDS){ if(m.k.test(title)) return m; }
+      return null;
+    }
+
+    /* ---------- Calendar linkleri ---------- */
+    function googleCalendarUrl(e){
+      if(!e.date) return null;
+      const start=new Date(e.date);
+      const end=new Date(start.getTime()+60*60*1000);
+      const fmt=(d)=> d.toISOString().replace(/[-:]/g,'').split('.')[0]+'Z';
+      const params=new URLSearchParams({
+        action:'TEMPLATE',
+        text:e.title||'Event',
+        details:e.url?`More: ${e.url}`:'Imported from City Navigator',
+        location:e.location||'',
+        dates:`${fmt(start)}/${fmt(end)}`
+      });
+      return 'https://calendar.google.com/calendar/render?'+params.toString();
+    }
+    function icsContent(e){
+      if(!e.date) return null;
+      const start=new Date(e.date);
+      const end=new Date(start.getTime()+60*60*1000);
+      const fmt=(d)=> d.toISOString().replace(/[-:]/g,'').split('.')[0]+'Z';
+      const uid=`${Date.now()}-${Math.random().toString(36).slice(2)}@city-navigator`;
+      return [
+        "BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//City Navigator//EN",
+        "BEGIN:VEVENT",
+        `UID:${uid}`,
+        `DTSTAMP:${fmt(new Date())}`,
+        `DTSTART:${fmt(start)}`,
+        `DTEND:${fmt(end)}`,
+        `SUMMARY:${(e.title||'Event').replace(/\r?\n/g,' ')}`,
+        e.location?`LOCATION:${e.location.replace(/\r?\n/g,' ')}`:"",
+        e.url?`URL:${e.url}`:"",
+        "END:VEVENT","END:VCALENDAR"
+      ].filter(Boolean).join("\r\n");
+    }
+
+    /* ---------- DOM referansları ---------- */
+    const srcEl=document.getElementById('src');
+    const qEl=document.getElementById('search');
+    const futureOnlyEl=document.getElementById('futureOnly');
+    const upEl=document.getElementById('upcoming');
+    const pastEl=document.getElementById('past');
+
+    /* ---------- Listeyi render eden fonksiyon ---------- */
+    function renderLists(all){
+      const now=new Date();
+      const upcoming=[], past=[];
+      for(const e of all){
+        if(!e.date){ upcoming.push(e); continue; }
+        const d=new Date(e.date);
+        (d>=now?upcoming:past).push(e);
+      }
+      upcoming.sort((a,b)=> new Date(a.date||'9999-12-31') - new Date(b.date||'9999-12-31'));
+      past.sort((a,b)=> new Date(b.date||'1970-01-01') - new Date(a.date||'1970-01-01'));
+
+      const render=(arr)=>{
+        if(!arr.length) return '<div class="empty">No events.</div>';
+        return arr.map(e=>{
+          const srcClass = e.source==="uw_welcome_point" ? "uw" : (e.source==="vistula_news" ? "vistula" : "");
+          const {text, cls}=formatDate(e.date);
+          const tags=tagsFromTitle(e.title);
+          const cat=categoryFromTitle(e.title);
+          const catCls = cat ? cat.cls : "";
+          const icon = cat ? cat.icon : "📌";
+          const gcal=googleCalendarUrl(e);
+          const ics=icsContent(e);
+          const icsHref=ics?URL.createObjectURL(new Blob([ics],{type:"text/calendar"})):null;
+
+          return `
+            <div class="card ${catCls}">
+              <div class="head">
+                <div class="title">${icon} <span>${e.title}</span></div>
+                ${e.source?`<span class="source-badge ${srcClass}">${e.source}</span>`:''}
+              </div>
+              <div class="date-badge ${cls}">${text}</div>
+              ${e.location?`<div class="muted">${e.location}</div>`:''}
+              ${tags.length?`<div class="tags">${tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>`:''}
+              <div class="actions">
+                ${e.url?`<a class="link" href="${e.url}" target="_blank" rel="noopener">🔗 View Details</a>`:''}
+                ${gcal?`<a class="link" href="${gcal}" target="_blank" rel="noopener">📅 Add to Google</a>`:''}
+                ${icsHref?`<a class="link" href="${icsHref}" download="event.ics">🗓️ Download .ics</a>`:''}
+              </div>
+            </div>
+          `;
+        }).join('');
+      };
+
+      upEl.innerHTML=render(upcoming);
+      pastEl.innerHTML=futureOnlyEl.checked ? '<div class="empty">Hidden (uncheck “Future only” to show past)</div>' : render(past);
+    }
+
+    /* ---------- Fetch + render ---------- */
+    async function load(){
+      const q=qEl.value.trim();
+      const src=srcEl.value;
+
+      const params=new URLSearchParams();
+      if(q) params.append('q', q);
+      if(src) params.append('source', src);
+      params.append('future_only','false'); // hepsi gelsin, JS tarafında ayıracağız
+
+      const res=await fetch('/events?'+params.toString());
+      const all=await res.json();
+      renderLists(all);
+    }
+
+    /* ---------- Event listeners ---------- */
+    document.getElementById('btnSearch').addEventListener('click', load);
+    document.getElementById('btnRefresh').addEventListener('click', async ()=>{
+      await fetch('/events/refresh', {method:'POST'});
+      load();
+    });
+    document.getElementById('btnToday').addEventListener('click', async ()=>{
+      const res = await fetch('/events/today');
+      const data = await res.json();
+      renderLists(data);
+    });
+    document.getElementById('btnWeek').addEventListener('click', async ()=>{
+      const res = await fetch('/events/this_week');
+      const data = await res.json();
+      renderLists(data);
+    });
+    futureOnlyEl.addEventListener('change', load);
+    srcEl.addEventListener('change', load);
+    qEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter') load(); });
+
+    /* ---------- İlk yükleme ---------- */
+    load();
+  </script>
+</body>
+</html>

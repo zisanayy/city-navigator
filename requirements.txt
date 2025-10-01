@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+pydantic-settings
+requests
+beautifulsoup4
+python-dateutil
+APScheduler
